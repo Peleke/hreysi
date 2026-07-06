@@ -31,6 +31,24 @@ archives:
 checksum:
   name_template: checksums.txt
 
+brews:
+  - name: hreysi
+    repository:
+      owner: Peleke
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/Peleke/hreysi"
+    description: "Ambient buildlog capture — every commit, journaled."
+    license: MIT
+    commit_author:
+      name: goreleaser-bot
+      email: noreply@github.com
+    install: |
+      bin.install "hreysi"
+    test: |
+      system "#{bin}/hreysi", "version"
+
 release:
   github:
     owner: Peleke
