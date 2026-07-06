@@ -8,6 +8,7 @@ package gitx
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -33,6 +34,27 @@ func run(dir string, args ...string) (string, error) {
 // RepoRoot returns the top-level directory of the git repo containing dir.
 func RepoRoot(dir string) (string, error) {
 	return run(dir, "rev-parse", "--show-toplevel")
+}
+
+// HooksDir returns the directory git will actually run hooks from, honoring a
+// core.hooksPath override. Capture only fires if our post-commit hook lives
+// here — hardcoding .git/hooks silently misses repos that set core.hooksPath
+// (husky, lefthook, etc.).
+func HooksDir(dir string) (string, error) {
+	out, err := run(dir, "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return "", err
+	}
+	if filepath.IsAbs(out) {
+		return out, nil
+	}
+	return filepath.Abs(filepath.Join(dir, out))
+}
+
+// Config returns a git config value, or "" if unset.
+func Config(dir, key string) string {
+	out, _ := run(dir, "config", "--get", key)
+	return out
 }
 
 // Head reads metadata about the current HEAD commit.

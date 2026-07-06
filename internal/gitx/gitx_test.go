@@ -42,6 +42,38 @@ func commit(t *testing.T, dir, name, msg string) {
 	}
 }
 
+func TestHooksDirDefaultAndOverride(t *testing.T) {
+	dir := gitInit(t)
+	root, err := RepoRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Default: <root>/.git/hooks
+	hd, err := HooksDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(hd) != "hooks" || filepath.Base(filepath.Dir(hd)) != ".git" {
+		t.Errorf("default HooksDir = %q, want <root>/.git/hooks", hd)
+	}
+
+	// Override via core.hooksPath — this is the gap the doctor must catch.
+	custom := filepath.Join(dir, "myhooks")
+	cmd := exec.Command("git", "config", "core.hooksPath", custom)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v\n%s", err, out)
+	}
+	hd, err = HooksDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Clean(hd) != filepath.Clean(custom) {
+		t.Errorf("overridden HooksDir = %q, want %q", hd, custom)
+	}
+}
+
 func TestHeadReadsRealCommit(t *testing.T) {
 	dir := gitInit(t)
 	commit(t, dir, "hello.txt", "feat: first")

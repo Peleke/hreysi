@@ -83,3 +83,55 @@ func TestInitRejectsNonRepo(t *testing.T) {
 		t.Error("expected error for non-git directory")
 	}
 }
+
+func TestCheckHealthyAfterInit(t *testing.T) {
+	dir := gitInit(t)
+	if _, err := Init(dir, "/usr/local/bin/hreysi"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Healthy {
+		t.Errorf("expected healthy after init, got: %+v", rep.Results)
+	}
+}
+
+func TestCheckFailsWithoutInit(t *testing.T) {
+	dir := gitInit(t)
+	rep, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Healthy {
+		t.Error("expected unhealthy before init (no hook)")
+	}
+}
+
+// The core.hooksPath override was the empirically-proven capture gap. After
+// init, Check must report against the overridden dir and still pass.
+func TestCheckHonorsHooksPathOverride(t *testing.T) {
+	dir := gitInit(t)
+	custom := filepath.Join(dir, "team-hooks")
+	cmd := exec.Command("git", "config", "core.hooksPath", custom)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v\n%s", err, out)
+	}
+
+	res, err := Init(dir, "hreysi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(res.HookPath) != filepath.Clean(custom) {
+		t.Errorf("hook installed at %q, want under %q", res.HookPath, custom)
+	}
+	rep, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Healthy {
+		t.Errorf("expected healthy with hooksPath override honored, got: %+v", rep.Results)
+	}
+}

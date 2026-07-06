@@ -95,10 +95,16 @@ None of those consumers link back into hreysi. Build to the directory, not the t
 
 | Command | Does |
 |---|---|
-| `hreysi init` | Scaffold `buildlog/` and install the post-commit hook |
+| `hreysi init` | Scaffold `buildlog/` and install the post-commit hook (honors `core.hooksPath`) |
 | `hreysi capture` | Append HEAD to today's entry (run by the hook; also manual) |
+| `hreysi doctor` | Verify capture is actually wired and will fire |
 | `hreysi version` | Print version |
 | `hreysi help` | Show help |
+
+`hreysi init` installs into the directory git *actually* runs hooks from, so it
+works even when `core.hooksPath` is overridden (husky, lefthook, …). Run
+`hreysi doctor` any time to confirm capture is live — it's the one-command answer
+to "is this thing on?"
 
 ## Build from Source
 

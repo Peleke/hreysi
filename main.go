@@ -33,6 +33,8 @@ func main() {
 		os.Exit(cmdInit())
 	case "capture":
 		os.Exit(cmdCapture())
+	case "doctor":
+		os.Exit(cmdDoctor())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -65,6 +67,9 @@ func cmdInit() int {
 	fmt.Printf("hreysi initialized in %s\n", res.Root)
 	fmt.Printf("  journal:  %s/\n", res.EntryDir)
 	fmt.Printf("  hook:     %s (%s)\n", res.HookPath, res.HookAction)
+	if res.Warning != "" {
+		fmt.Printf("  note:     %s detected — run `hreysi doctor` to confirm capture fires\n", res.Warning)
+	}
 
 	if !noSkill {
 		if written, serr := skillpack.Install(res.Root, skillFS); serr != nil {
@@ -99,6 +104,31 @@ func cmdCapture() int {
 	return 0
 }
 
+func cmdDoctor() int {
+	cwd, _ := os.Getwd()
+	rep, err := scaffold.Check(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
+	glyph := map[string]string{"ok": "✓", "warn": "!", "fail": "✗"}
+	fmt.Printf("hreysi doctor — %s\n", rep.Root)
+	fmt.Printf("  hooks dir: %s\n", rep.HooksDir)
+	for _, c := range rep.Results {
+		line := fmt.Sprintf("  %s %s", glyph[c.Level], c.Name)
+		if c.Detail != "" {
+			line += " — " + c.Detail
+		}
+		fmt.Println(line)
+	}
+	if rep.Healthy {
+		fmt.Println("\ncapture is live — every commit will be journaled.")
+		return 0
+	}
+	fmt.Println("\ncapture will NOT fire reliably. Run `hreysi init` to (re)install the hook.")
+	return 1
+}
+
 func usage() {
 	fmt.Print(`hreysi — ambient buildlog capture
 
@@ -107,6 +137,7 @@ Every git commit, appended to a dated journal. No ceremony.
 USAGE:
   hreysi init       Scaffold buildlog/ and install the post-commit capture hook
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
+  hreysi doctor     Check that capture is actually wired and will fire
   hreysi version    Print version
   hreysi help       Show this help
 

@@ -28,6 +28,24 @@ type Result struct {
 	EntryDir   string
 	HookPath   string
 	HookAction string // "created" | "appended" | "up-to-date"
+	Warning    string // e.g. a detected hook manager that may override our hook
+}
+
+// detectHookManager returns the name of a hook-management tool in use at root,
+// or "" if none. These tools can redirect or own the post-commit hook, so we
+// surface them rather than silently assume capture is wired.
+func detectHookManager(root string) string {
+	for _, c := range []struct{ path, name string }{
+		{".husky", "husky"},
+		{"lefthook.yml", "lefthook"},
+		{"lefthook.yaml", "lefthook"},
+		{".pre-commit-config.yaml", "pre-commit"},
+	} {
+		if _, err := os.Stat(filepath.Join(root, c.path)); err == nil {
+			return c.name
+		}
+	}
+	return ""
 }
 
 // Init scaffolds the journal directory and installs the post-commit hook.
@@ -47,11 +65,15 @@ func Init(dir, exePath string) (Result, error) {
 		return res, err
 	}
 
-	hookDir := filepath.Join(root, ".git", "hooks")
+	hookDir, err := gitx.HooksDir(root)
+	if err != nil {
+		return res, err
+	}
 	if err := os.MkdirAll(hookDir, 0o755); err != nil {
 		return res, err
 	}
 	res.HookPath = filepath.Join(hookDir, "post-commit")
+	res.Warning = detectHookManager(root)
 	body := hookBody(exePath)
 
 	switch existing, err := os.ReadFile(res.HookPath); {
@@ -77,4 +99,81 @@ func Init(dir, exePath string) (Result, error) {
 		return res, err
 	}
 	return res, nil
+}
+
+// CheckResult is one line in a doctor report. Level is "ok" | "warn" | "fail".
+type CheckResult struct {
+	Name   string
+	Level  string
+	Detail string
+}
+
+// Report is the result of Check: whether ambient capture will actually fire.
+type Report struct {
+	Root     string
+	HooksDir string
+	Results  []CheckResult
+	Healthy  bool // no "fail" — capture will fire on commit
+}
+
+// Check inspects a repo and reports whether hreysi's capture hook is wired into
+// the directory git actually runs hooks from. This is the guarantee `hreysi
+// doctor` gives: "is capture live?" answered, not assumed.
+func Check(dir string) (Report, error) {
+	var r Report
+
+	root, err := gitx.RepoRoot(dir)
+	if err != nil {
+		return r, fmt.Errorf("not a git repository")
+	}
+	r.Root = root
+
+	hooksDir, err := gitx.HooksDir(root)
+	if err != nil {
+		return r, err
+	}
+	r.HooksDir = hooksDir
+
+	add := func(name, level, detail string) {
+		r.Results = append(r.Results, CheckResult{name, level, detail})
+	}
+	lvl := func(ok bool) string {
+		if ok {
+			return "ok"
+		}
+		return "fail"
+	}
+
+	if hp := gitx.Config(root, "core.hooksPath"); hp != "" {
+		add("core.hooksPath override", "ok", "set to "+hp+" — hook installed there, not .git/hooks")
+	}
+
+	hookPath := filepath.Join(hooksDir, "post-commit")
+	info, statErr := os.Stat(hookPath)
+	exists := statErr == nil
+	add("post-commit hook present", lvl(exists), hookPath)
+
+	var wired, executable bool
+	if exists {
+		executable = info.Mode()&0o100 != 0
+		if data, e := os.ReadFile(hookPath); e == nil {
+			wired = strings.Contains(string(data), hookMarker)
+		}
+	}
+	add("hreysi capture wired", lvl(wired), "hook runs `hreysi capture`")
+	add("hook executable", lvl(executable), "")
+
+	if mgr := detectHookManager(root); mgr != "" {
+		add("hook manager detected", "warn", mgr+" in use — confirm capture fires with a test commit")
+	}
+
+	_, blErr := os.Stat(filepath.Join(root, entry.DirName))
+	if blErr == nil {
+		add("journal directory", "ok", entry.DirName+"/")
+	} else {
+		add("journal directory", "warn", entry.DirName+"/ missing (capture will create it)")
+	}
+
+	r.Healthy = exists && wired && executable
+	return r, nil
 }
