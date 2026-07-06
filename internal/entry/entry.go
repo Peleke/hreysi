@@ -62,11 +62,7 @@ func Append(root string, info gitx.HeadInfo) (string, error) {
 	var content string
 	switch data, err := os.ReadFile(path); {
 	case err == nil:
-		content = string(data)
-		if !strings.Contains(content, "## Commits") {
-			content = strings.TrimRight(content, "\n") + "\n\n## Commits\n"
-		}
-		content += block
+		content = insertCommit(string(data), block)
 	case os.IsNotExist(err):
 		content = fmt.Sprintf("# %s\n\n## Commits\n%s", info.Date, block)
 	default:
@@ -77,4 +73,28 @@ func Append(root string, info gitx.HeadInfo) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// insertCommit places a commit block at the end of the "## Commits" section,
+// before any narrative section that expansion may have added (## The Journey,
+// ## Improvements, ...). Capture (mechanical) and expansion (narrative) own
+// different sections of the same file, so a later commit must not append past
+// the narrative.
+func insertCommit(content, block string) string {
+	const marker = "## Commits"
+	i := strings.Index(content, marker)
+	if i < 0 {
+		// No Commits section yet — start one at the end.
+		return strings.TrimRight(content, "\n") + "\n\n## Commits\n" + block
+	}
+	// Look for the next top-level section after the Commits heading.
+	rest := content[i+len(marker):]
+	if j := strings.Index(rest, "\n## "); j >= 0 {
+		at := i + len(marker) + j
+		head := strings.TrimRight(content[:at], "\n")
+		tail := strings.TrimLeft(content[at:], "\n")
+		return head + "\n" + block + tail
+	}
+	// Commits is the last section — append at the end of the file.
+	return strings.TrimRight(content, "\n") + "\n" + block
 }

@@ -54,6 +54,43 @@ func TestAppendCreatesThenAppendsSameDay(t *testing.T) {
 	}
 }
 
+func TestAppendLandsInsideCommitsAfterExpansion(t *testing.T) {
+	root := t.TempDir()
+
+	// Capture one commit, then simulate the expand skill adding narrative
+	// sections after ## Commits.
+	first := gitx.HeadInfo{Hash: "aaa", Subject: "first", Date: "2026-07-06", Files: []string{"a.go"}}
+	path, err := Append(root, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	expanded := string(data) + "\n## The Journey\n\nWe built the thing.\n\n## Improvements\n\n### Tooling\n- lesson\n"
+	if err := os.WriteFile(path, []byte(expanded), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A later commit must land inside ## Commits, before the narrative.
+	second := gitx.HeadInfo{Hash: "bbb", Subject: "second", Date: "2026-07-06", Files: []string{"b.go"}}
+	if _, err := Append(root, second); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := os.ReadFile(path)
+	s := string(got)
+	posB := strings.Index(s, "bbb")
+	posJourney := strings.Index(s, "## The Journey")
+	if posB < 0 || posJourney < 0 {
+		t.Fatalf("expected both commit and journey present:\n%s", s)
+	}
+	if posB > posJourney {
+		t.Errorf("commit bbb landed after the narrative — should be inside ## Commits:\n%s", s)
+	}
+	if !strings.Contains(s, "We built the thing.") {
+		t.Errorf("clobbered the narrative:\n%s", s)
+	}
+}
+
 func TestAppendCapsFileList(t *testing.T) {
 	root := t.TempDir()
 	files := make([]string, 25)
