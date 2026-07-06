@@ -1,17 +1,47 @@
+<div align="center">
+
 # hreysi
 
-**Ambient buildlog capture.** Every git commit, appended to a dated journal.
-No ceremony, nothing to remember.
+### Ambient buildlog capture — every commit leaves a stone
 
-> *hreysi* (Old Norse) — a cairn; a pile of stones left to mark a path so the
-> route stays legible to whoever comes later. Each commit drops a stone.
+[![Go](https://img.shields.io/badge/Go_1.26-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Peleke/hreysi/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI)](https://github.com/Peleke/hreysi/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Peleke/hreysi?style=for-the-badge&logo=github&label=release)](https://github.com/Peleke/hreysi/releases)
+[![Homebrew](https://img.shields.io/badge/Homebrew-Peleke%2Ftap-FBB040?style=for-the-badge&logo=homebrew&logoColor=white)](https://github.com/Peleke/homebrew-tap)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
+**Commit like you always do. Your work journals itself.**
+
+[Install](#install) · [Use](#use) · [What It Writes](#what-it-writes) · [The Idea](#the-idea) · [Build](#build-from-source)
+
+</div>
 
 ---
+
+## The Idea
+
+Every commit is a decision you already made and already described. Then it evaporates — the message scrolls past, the context is gone, and next week you can't remember what the week even *was*.
+
+**hreysi** catches it. One `init`, and from then on every `git commit` is appended to a dated markdown journal — no command to remember, no tool to reach for, no ceremony.
+
+> *hreysi* (Old Norse) — a **cairn**: a pile of stones left to mark a path so the route stays legible to whoever comes later. Each commit drops a stone. The pile becomes the story.
+
+It does exactly one thing, and it never gets in your way:
+
+- **No wall.** hreysi installs a *non-blocking* `post-commit` hook. There is no pre-commit gate, no enforcement, no `BUILDLOG_COMMIT=1` bypass to memorize. Commit however you like — capture fires after, and a hiccup can never fail a commit.
+- **Real time, not wall-clock.** Each block is stamped with git's committer date (`%cI`), so a capture fired from a hook still records the true commit time. Downstream gets an accurate event stream.
+- **Zero dependencies.** A single static Go binary. No runtime, no venv, no Python version roulette.
 
 ## Install
 
 ```sh
 curl -sSL https://raw.githubusercontent.com/Peleke/hreysi/main/install.sh | sh
+```
+
+Or with Homebrew:
+
+```sh
+brew install Peleke/tap/hreysi
 ```
 
 Or grab a binary from [Releases](https://github.com/Peleke/hreysi/releases).
@@ -24,39 +54,42 @@ hreysi init                 # scaffold buildlog/ + install the capture hook
 git commit -m "feat: ..."   # → appended to buildlog/YYYY-MM-DD.md, automatically
 ```
 
-That's it. `hreysi init` installs a **non-blocking** `post-commit` hook. There
-is no pre-commit wall, no enforcement, no bypass to remember — capture is a
-side-effect of committing, and a hiccup can never fail a commit.
+That's the whole workflow. There is no step 3.
 
-## What it writes
+## What It Writes
 
 ```markdown
 # 2026-07-06
 
 ## Commits
 
-### `a1b2c3d` — feat: add capture command
-_2026-07-06T21:51:54-04:00_
+### `4689e74` — feat: initial app
+_2026-07-06T18:49:41-04:00_
 
 Files:
-- `main.go`
-- `internal/entry/entry.go`
+- `README.md`
+- `app.py`
+
+### `1a297b3` — fix: add config constant
+_2026-07-06T18:49:42-04:00_
+
+Files:
+- `app.py`
 ```
 
-Dated file per day, one block per commit, each stamped with the **real commit
-time** (git's committer date, not wall-clock — so a hook-fired capture is still
-accurate).
+One file per day. One block per commit. Timestamped, with the files it touched.
 
-## The directory is the product
+## The Directory *Is* the Product
 
-`buildlog/` is the entire surface and the decoupling boundary. hreysi only ever
-**writes** it; everything downstream only ever **reads** it:
+`buildlog/` is the entire surface — and a deliberate decoupling boundary. hreysi **only ever writes** it; everything downstream **only ever reads** it:
 
-- a narrative-expansion skill that turns commit stubs into the story of the week
-- a content pipeline that reshapes that story into posts
-- a learning loop that mines the build narrative
+```
+git commit ──▶ hreysi ──▶ buildlog/*.md ──▶ ┌─ narrative expansion (the story of the week)
+  (producer)                    (protocol)   ├─ content pipeline (posts, threads)
+                                             └─ learning loop (mine the build narrative)
+```
 
-None of them link back into hreysi. Build to the directory, not to the tool.
+None of those consumers link back into hreysi. Build to the directory, not the tool — and any of them can be swapped, added, or automated later without touching capture.
 
 ## Commands
 
@@ -67,11 +100,23 @@ None of them link back into hreysi. Build to the directory, not to the tool.
 | `hreysi version` | Print version |
 | `hreysi help` | Show help |
 
-## Build from source
+## Build from Source
 
 ```sh
+git clone https://github.com/Peleke/hreysi
+cd hreysi
 go build -o hreysi .
 go test ./...
 ```
 
-MIT licensed.
+Stdlib only — nothing to fetch.
+
+---
+
+<div align="center">
+
+**Leave a legible trail. Let a later traveler read it.**
+
+MIT © [Peleke Sengstacke](https://github.com/Peleke)
+
+</div>
