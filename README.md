@@ -91,6 +91,24 @@ git commit ──▶ hreysi ──▶ buildlog/*.md ──▶ ┌─ narrative e
 
 None of those consumers link back into hreysi. Build to the directory, not the tool — and any of them can be swapped, added, or automated later without touching capture.
 
+## Ambient expansion (optional)
+
+`hreysi init --ambient` also wires a Claude Code **SessionEnd** hook that, when
+there are commits since the last expansion, runs the `expand` skill against the
+session transcript — so the narrative gets written *while the context is warm*,
+with nothing to remember. Gated so it never repeats work; best-effort and
+non-fatal. Add `--ambient-stop` to also expand on long sessions.
+
+## Using hreysi with LifeOS / PAI
+
+hreysi is built from the same primitives as Daniel Miessler's
+[LifeOS / PAI](https://github.com/danielmiessler/Personal_AI_Infrastructure) —
+Skills, lifecycle hooks, and a filesystem capture layer — so it *slots in* rather
+than integrating. `hreysi skills --global` drops the `expand` skill into
+`~/.claude/Skills/`, and `hreysi init --ambient` wires capture + expansion per
+repo. Full **agent-followable** setup (your Digital Assistant can run it):
+[`docs/lifeos-integration.md`](docs/lifeos-integration.md).
+
 ## Commands
 
 | Command | Does |

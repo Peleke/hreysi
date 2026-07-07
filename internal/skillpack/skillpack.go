@@ -12,16 +12,17 @@ import (
 	"strings"
 )
 
-// Install writes the embedded skills into <root>/.claude/skills/, stripping the
-// leading "skills/" prefix. It returns the repo-relative paths written.
-func Install(root string, src fs.FS) ([]string, error) {
+// Install writes the embedded skills into destDir (e.g. a project's
+// .claude/skills/ or LifeOS's ~/.claude/Skills/), stripping the leading
+// "skills/" prefix. It returns the absolute paths written.
+func Install(destDir string, src fs.FS) ([]string, error) {
 	var written []string
 	err := fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
 		rel := strings.TrimPrefix(p, "skills/")
-		dest := filepath.Join(root, ".claude", "skills", rel)
+		dest := filepath.Join(destDir, rel)
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
 		}
@@ -32,7 +33,7 @@ func Install(root string, src fs.FS) ([]string, error) {
 		if err := os.WriteFile(dest, data, 0o644); err != nil {
 			return err
 		}
-		written = append(written, filepath.Join(".claude", "skills", rel))
+		written = append(written, dest)
 		return nil
 	})
 	return written, err

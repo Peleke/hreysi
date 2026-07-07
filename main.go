@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +48,8 @@ func main() {
 		os.Exit(cmdDoctor())
 	case "watch":
 		os.Exit(cmdWatch())
+	case "skills":
+		os.Exit(cmdSkills())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -90,7 +93,8 @@ func cmdInit() int {
 	}
 
 	if !noSkill {
-		if written, serr := skillpack.Install(res.Root, skillFS); serr != nil {
+		dest := filepath.Join(res.Root, ".claude", "skills")
+		if written, serr := skillpack.Install(dest, skillFS); serr != nil {
 			fmt.Fprintf(os.Stderr, "hreysi: skill install warning: %v\n", serr)
 		} else if len(written) > 0 {
 			fmt.Println("  skill:    .claude/skills/expand — run it to narrate your day into the entry")
@@ -129,6 +133,42 @@ func cmdCapture() int {
 		fmt.Printf("hreysi: amended %s → %s\n", out.Hash, out.Path)
 	default:
 		fmt.Printf("hreysi: captured %s → %s\n", out.Hash, out.Path)
+	}
+	return 0
+}
+
+func cmdSkills() int {
+	global := false
+	for _, a := range os.Args[2:] {
+		if a == "--global" {
+			global = true
+		}
+	}
+
+	var dest string
+	if global {
+		// LifeOS / PAI: skills live under ~/.claude/Skills/ (capital S).
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+			return 1
+		}
+		dest = filepath.Join(home, ".claude", "Skills")
+	} else {
+		cwd, _ := os.Getwd()
+		if root, err := gitx.RepoRoot(cwd); err == nil {
+			cwd = root
+		}
+		dest = filepath.Join(cwd, ".claude", "skills")
+	}
+
+	written, err := skillpack.Install(dest, skillFS)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
+	for _, w := range written {
+		fmt.Printf("hreysi: installed %s\n", w)
 	}
 	return 0
 }
@@ -189,6 +229,7 @@ USAGE:
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
   hreysi watch      Watch the reflog and capture every commit — any client, can't-miss
   hreysi doctor     Check that capture is actually wired and will fire
+  hreysi skills     Install the bundled skills (--global → ~/.claude/Skills for LifeOS/PAI)
   hreysi version    Print version
   hreysi help       Show this help
 
