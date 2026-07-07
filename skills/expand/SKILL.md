@@ -80,3 +80,8 @@ The `format` argument selects the render target (default `buildlog`):
   overwrite each other.
 - **Idempotent:** if the sections already exist, refine them to cover newer
   commits rather than duplicating.
+- **Stamp when done:** after writing the narrative, record that this commit has
+  been expanded so the ambient trigger doesn't re-fire:
+  ```sh
+  git rev-parse HEAD > buildlog/.hreysi/last_expanded
+  ```

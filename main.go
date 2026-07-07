@@ -7,8 +7,10 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/Peleke/hreysi/internal/ambient"
 	"github.com/Peleke/hreysi/internal/capture"
 	"github.com/Peleke/hreysi/internal/gitx"
 	"github.com/Peleke/hreysi/internal/scaffold"
@@ -24,6 +26,12 @@ var version = "dev"
 //
 //go:embed skills
 var skillFS embed.FS
+
+// hookFS carries the ambient expansion hook script (dropped by
+// `hreysi init --ambient`).
+//
+//go:embed hooks
+var hookFS embed.FS
 
 func main() {
 	if len(os.Args) < 2 {
@@ -52,9 +60,15 @@ func main() {
 
 func cmdInit() int {
 	noSkill := false
+	var ambientEvents []string
 	for _, a := range os.Args[2:] {
-		if a == "--no-skill" {
+		switch a {
+		case "--no-skill":
 			noSkill = true
+		case "--ambient": // default trigger: expand at end of session
+			ambientEvents = []string{"SessionEnd"}
+		case "--ambient-stop": // also expand on Stop (long / ultramarathon sessions)
+			ambientEvents = []string{"SessionEnd", "Stop"}
 		}
 	}
 
@@ -80,6 +94,15 @@ func cmdInit() int {
 			fmt.Fprintf(os.Stderr, "hreysi: skill install warning: %v\n", serr)
 		} else if len(written) > 0 {
 			fmt.Println("  skill:    .claude/skills/expand — run it to narrate your day into the entry")
+		}
+	}
+
+	if len(ambientEvents) > 0 {
+		if err := ambient.Install(res.Root, hookFS, ambientEvents); err != nil {
+			fmt.Fprintf(os.Stderr, "hreysi: ambient hook warning: %v\n", err)
+		} else {
+			fmt.Printf("  ambient:  expansion hook wired for %s (best-effort, non-fatal)\n",
+				strings.Join(ambientEvents, "+"))
 		}
 	}
 
@@ -162,6 +185,7 @@ Every git commit, appended to a dated journal. No ceremony.
 
 USAGE:
   hreysi init       Scaffold buildlog/ and install the post-commit capture hook
+                    (--ambient wires a SessionEnd expansion hook; --ambient-stop adds Stop)
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
   hreysi watch      Watch the reflog and capture every commit — any client, can't-miss
   hreysi doctor     Check that capture is actually wired and will fire
