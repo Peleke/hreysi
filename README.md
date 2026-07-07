@@ -139,7 +139,9 @@ Why the split? The lived experience — the *why*, the friction, the aha — isn
 
 `buildlog/` is the entire surface and a deliberate decoupling boundary: hreysi **only ever writes** it, and everything downstream **only ever reads** it. Nothing links back into the tool.
 
-The headline consumer: **turn your week into LinkedIn.** An expanded entry — the real story, dead ends and all — is exactly the source text a tool like [linwheel](https://www.linwheel.io) reshapes into posts. You already generated the content; you just committed it. The same directory feeds a portfolio generator, a changelog, or a learning loop just as easily. Build to the directory, not the tool.
+The headline consumer: **turn your week into LinkedIn.** An expanded entry — the real story, dead ends and all — is exactly the source text a tool like [linwheel](https://www.linwheel.io) reshapes into posts. You already generated the content; you just committed it.
+
+This is **opt-in and manual**. `hreysi init --linwheel` (or `hreysi skills --linwheel`) adds a `reshape` skill: a **weekly digest** you fire on demand that scans the week's narrative, triages the post-worthy threads, and drops LinkedIn **drafts** into your linwheel dashboard for review. Nothing auto-generates, nothing auto-publishes — leave `--linwheel` off and hreysi never touches content. The same directory feeds a portfolio generator, a changelog, or a learning loop just as easily. Build to the directory, not the tool.
 
 ## Using hreysi with LifeOS / PAI
 

@@ -28,6 +28,13 @@ var version = "dev"
 //go:embed skills
 var skillFS embed.FS
 
+// optSkillFS carries opt-in skills (e.g. the linwheel `reshape` weekly digest),
+// installed only when the user asks (`--linwheel`). Content generation is a
+// choice, never on by default.
+//
+//go:embed optskills
+var optSkillFS embed.FS
+
 // hookFS carries the ambient expansion hook script (dropped by
 // `hreysi init --ambient`).
 //
@@ -63,11 +70,14 @@ func main() {
 
 func cmdInit() int {
 	noSkill := false
+	linwheel := false
 	var ambientEvents []string
 	for _, a := range os.Args[2:] {
 		switch a {
 		case "--no-skill":
 			noSkill = true
+		case "--linwheel": // opt in to the reshape weekly-digest skill
+			linwheel = true
 		case "--ambient": // default trigger: expand at end of session
 			ambientEvents = []string{"SessionEnd"}
 		case "--ambient-stop": // also expand on Stop (long / ultramarathon sessions)
@@ -98,6 +108,13 @@ func cmdInit() int {
 			fmt.Fprintf(os.Stderr, "hreysi: skill install warning: %v\n", serr)
 		} else if len(written) > 0 {
 			fmt.Println("  skill:    .claude/skills/expand — run it to narrate your day into the entry")
+		}
+		if linwheel {
+			if _, serr := skillpack.Install(dest, optSkillFS); serr != nil {
+				fmt.Fprintf(os.Stderr, "hreysi: linwheel skill warning: %v\n", serr)
+			} else {
+				fmt.Println("  skill:    .claude/skills/reshape — weekly digest → linwheel drafts (opt-in)")
+			}
 		}
 	}
 
@@ -138,10 +155,13 @@ func cmdCapture() int {
 }
 
 func cmdSkills() int {
-	global := false
+	global, linwheel := false, false
 	for _, a := range os.Args[2:] {
-		if a == "--global" {
+		switch a {
+		case "--global":
 			global = true
+		case "--linwheel":
+			linwheel = true
 		}
 	}
 
@@ -166,6 +186,14 @@ func cmdSkills() int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
 		return 1
+	}
+	if linwheel {
+		more, lerr := skillpack.Install(dest, optSkillFS)
+		if lerr != nil {
+			fmt.Fprintf(os.Stderr, "hreysi: %v\n", lerr)
+			return 1
+		}
+		written = append(written, more...)
 	}
 	for _, w := range written {
 		fmt.Printf("hreysi: installed %s\n", w)
@@ -225,11 +253,13 @@ Every git commit, appended to a dated journal. No ceremony.
 
 USAGE:
   hreysi init       Scaffold buildlog/ and install the post-commit capture hook
-                    (--ambient wires a SessionEnd expansion hook; --ambient-stop adds Stop)
+                    (--ambient wires a SessionEnd expansion hook; --ambient-stop adds Stop;
+                     --linwheel adds the opt-in weekly reshape→linwheel digest skill)
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
   hreysi watch      Watch the reflog and capture every commit — any client, can't-miss
   hreysi doctor     Check that capture is actually wired and will fire
-  hreysi skills     Install the bundled skills (--global → ~/.claude/Skills for LifeOS/PAI)
+  hreysi skills     Install the bundled skills (--global → ~/.claude/Skills for LifeOS/PAI;
+                    --linwheel → include the opt-in reshape digest skill)
   hreysi version    Print version
   hreysi help       Show this help
 
