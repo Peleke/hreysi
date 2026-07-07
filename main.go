@@ -7,11 +7,13 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/Peleke/hreysi/internal/entry"
+	"github.com/Peleke/hreysi/internal/capture"
 	"github.com/Peleke/hreysi/internal/gitx"
 	"github.com/Peleke/hreysi/internal/scaffold"
 	"github.com/Peleke/hreysi/internal/skillpack"
+	"github.com/Peleke/hreysi/internal/watch"
 )
 
 // version is overridden at release time via -ldflags "-X main.version=...".
@@ -35,6 +37,8 @@ func main() {
 		os.Exit(cmdCapture())
 	case "doctor":
 		os.Exit(cmdDoctor())
+	case "watch":
+		os.Exit(cmdWatch())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -90,17 +94,39 @@ func cmdCapture() int {
 		fmt.Fprintln(os.Stderr, "hreysi: not a git repository")
 		return 1
 	}
-	info, err := gitx.Head(root)
+	out, err := capture.Once(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hreysi: could not read HEAD: %v\n", err)
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
 		return 1
 	}
-	path, err := entry.Append(root, info)
+	switch out.Action {
+	case "skipped":
+		fmt.Printf("hreysi: %s already captured\n", out.Hash)
+	case "amended":
+		fmt.Printf("hreysi: amended %s → %s\n", out.Hash, out.Path)
+	default:
+		fmt.Printf("hreysi: captured %s → %s\n", out.Hash, out.Path)
+	}
+	return 0
+}
+
+func cmdWatch() int {
+	cwd, _ := os.Getwd()
+	root, err := gitx.RepoRoot(cwd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hreysi: could not write entry: %v\n", err)
+		fmt.Fprintln(os.Stderr, "hreysi: not a git repository")
 		return 1
 	}
-	fmt.Printf("hreysi: captured %s → %s\n", info.Hash, path)
+	fmt.Printf("hreysi: watching %s — every commit captured (any client), Ctrl-C to stop\n", root)
+	err = watch.Run(root, time.Second, func() {
+		if out, e := capture.Once(root); e == nil && out.Action != "skipped" {
+			fmt.Printf("hreysi: %s %s\n", out.Action, out.Hash)
+		}
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
 	return 0
 }
 
@@ -137,6 +163,7 @@ Every git commit, appended to a dated journal. No ceremony.
 USAGE:
   hreysi init       Scaffold buildlog/ and install the post-commit capture hook
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
+  hreysi watch      Watch the reflog and capture every commit — any client, can't-miss
   hreysi doctor     Check that capture is actually wired and will fire
   hreysi version    Print version
   hreysi help       Show this help

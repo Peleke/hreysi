@@ -15,6 +15,7 @@ import (
 // HeadInfo is everything hreysi records about a single commit.
 type HeadInfo struct {
 	Hash      string   // short hash
+	FullHash  string   // full hash (used for the capture-dedup marker)
 	Subject   string   // first line of the commit message
 	Timestamp string   // committer date, ISO-8601 (e.g. 2026-07-06T21:51:54-04:00)
 	Date      string   // committer date, YYYY-MM-DD (used to bucket entries)
@@ -36,12 +37,10 @@ func RepoRoot(dir string) (string, error) {
 	return run(dir, "rev-parse", "--show-toplevel")
 }
 
-// HooksDir returns the directory git will actually run hooks from, honoring a
-// core.hooksPath override. Capture only fires if our post-commit hook lives
-// here — hardcoding .git/hooks silently misses repos that set core.hooksPath
-// (husky, lefthook, etc.).
-func HooksDir(dir string) (string, error) {
-	out, err := run(dir, "rev-parse", "--git-path", "hooks")
+// GitPath resolves a path inside the git dir (e.g. "hooks", "logs/HEAD"),
+// honoring worktrees and core.hooksPath. Returns an absolute path.
+func GitPath(dir, rel string) (string, error) {
+	out, err := run(dir, "rev-parse", "--git-path", rel)
 	if err != nil {
 		return "", err
 	}
@@ -51,9 +50,32 @@ func HooksDir(dir string) (string, error) {
 	return filepath.Abs(filepath.Join(dir, out))
 }
 
+// HooksDir returns the directory git will actually run hooks from, honoring a
+// core.hooksPath override. Capture only fires if our post-commit hook lives
+// here — hardcoding .git/hooks silently misses repos that set core.hooksPath
+// (husky, lefthook, etc.).
+func HooksDir(dir string) (string, error) {
+	return GitPath(dir, "hooks")
+}
+
 // Config returns a git config value, or "" if unset.
 func Config(dir, key string) string {
 	out, _ := run(dir, "config", "--get", key)
+	return out
+}
+
+// ReflogSubject returns the subject of the most recent reflog entry, e.g.
+// "commit: msg", "commit (amend): msg", or "checkout: moving from ...".
+// git appends to the reflog on every HEAD move, so this classifies what just
+// happened regardless of how the commit was made (CLI, GUI, hook or not).
+func ReflogSubject(dir string) string {
+	out, _ := run(dir, "reflog", "--format=%gs", "-1")
+	return out
+}
+
+// ShortHash returns the abbreviated hash for a ref.
+func ShortHash(dir, ref string) string {
+	out, _ := run(dir, "rev-parse", "--short", ref)
 	return out
 }
 
@@ -67,6 +89,7 @@ func Head(dir string) (HeadInfo, error) {
 	if info.Hash, err = run(dir, "rev-parse", "--short", "HEAD"); err != nil {
 		return info, err
 	}
+	info.FullHash, _ = run(dir, "rev-parse", "HEAD")
 	if info.Subject, err = run(dir, "log", "-1", "--format=%s"); err != nil {
 		return info, err
 	}

@@ -97,6 +97,7 @@ None of those consumers link back into hreysi. Build to the directory, not the t
 |---|---|
 | `hreysi init` | Scaffold `buildlog/` and install the post-commit hook (honors `core.hooksPath`) |
 | `hreysi capture` | Append HEAD to today's entry (run by the hook; also manual) |
+| `hreysi watch` | Watch the reflog and capture every commit — any client, can't-miss |
 | `hreysi doctor` | Verify capture is actually wired and will fire |
 | `hreysi version` | Print version |
 | `hreysi help` | Show help |
@@ -105,6 +106,16 @@ None of those consumers link back into hreysi. Build to the directory, not the t
 works even when `core.hooksPath` is overridden (husky, lefthook, …). Run
 `hreysi doctor` any time to confirm capture is live — it's the one-command answer
 to "is this thing on?"
+
+### Can't-miss capture: `hreysi watch`
+
+The git hook covers the vast majority of commits, but it can be bypassed
+(`core.hooksPath`, some GUI clients, `--no-verify` edge cases). `hreysi watch`
+tails the git **reflog** (`.git/logs/HEAD`), which git appends to on *every*
+commit no matter how it's made — so capture becomes truly can't-miss. It's
+idempotent with the hook (a commit is never logged twice) and handles `--amend`
+by replacing the prior block. Run it in the foreground, or as a background
+service (a sample `launchd`/`systemd` unit lives in `docs/`).
 
 ## Build from Source
 
