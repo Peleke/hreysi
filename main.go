@@ -167,13 +167,15 @@ func cmdSkills() int {
 
 	var dest string
 	if global {
-		// LifeOS / PAI: skills live under ~/.claude/Skills/ (capital S).
+		// Claude Code / LifeOS read ~/.claude/skills (lowercase). The docs say
+		// "Skills" but the installer and the harness both use lowercase, and on
+		// case-sensitive filesystems only lowercase is read.
 		home, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
 			return 1
 		}
-		dest = filepath.Join(home, ".claude", "Skills")
+		dest = filepath.Join(home, ".claude", "skills")
 	} else {
 		cwd, _ := os.Getwd()
 		if root, err := gitx.RepoRoot(cwd); err == nil {

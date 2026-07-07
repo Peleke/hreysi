@@ -16,7 +16,7 @@ cp -r ~/.claude ~/.claude-backup-$(date +%Y%m%d)
 # preserved across upgrades.
 ```
 
-Verify LifeOS is live: `~/.claude/Skills/`, `~/.claude/hooks/`, and its agentic
+Verify LifeOS is live: `~/.claude/skills/`, `~/.claude/hooks/`, and its agentic
 routing are present.
 
 ## 1. Wire hreysi in

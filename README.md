@@ -148,7 +148,7 @@ This is **opt-in and manual**. `hreysi init --linwheel` (or `hreysi skills --lin
 hreysi is built from the same primitives as Daniel Miessler's [LifeOS / PAI](https://github.com/danielmiessler/Personal_AI_Infrastructure) — Skills, lifecycle hooks, and a filesystem capture layer — so it *slots in* rather than integrating.
 
 ```sh
-hreysi skills --global      # drop the expand skill into ~/.claude/Skills/ (PAI layout)
+hreysi skills --global      # drop the expand skill into ~/.claude/skills/ (PAI layout)
 hreysi init --ambient       # per repo: capture + expansion, wired
 ```
 
@@ -162,7 +162,7 @@ Your commit stream (`buildlog/`) becomes a WORK/OBSERVABILITY source that comple
 | `hreysi capture` | Append HEAD to today's entry — run by the hook; also manual/backfill. Idempotent; replaces on `--amend` |
 | `hreysi watch` | Tail the reflog and capture every commit from any client — can't-miss |
 | `hreysi doctor` | Verify capture is wired and will fire |
-| `hreysi skills` | Install the bundled skills (`--global` → `~/.claude/Skills/` for LifeOS/PAI) |
+| `hreysi skills` | Install the bundled skills (`--global` → `~/.claude/skills/` for LifeOS/PAI) |
 | `hreysi version` | Print version |
 | `hreysi help` | Show help |
 

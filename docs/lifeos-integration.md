@@ -9,7 +9,7 @@
 
 | hreysi piece | LifeOS home | Role |
 |---|---|---|
-| `expand` skill (`SKILL.md`) | `~/.claude/Skills/expand/` | narrate git commits into the story of the work |
+| `expand` skill (`SKILL.md`) | `~/.claude/skills/expand/` | narrate git commits into the story of the work |
 | commit capture (`buildlog/`) | a **WORK / OBSERVABILITY** source per repo | complements `History/` (git-commit stream vs session-transcript stream) |
 | expansion hook | a **SessionEnd** hook | LifeOS's Stop hook already "documents learnings"; this specializes it to git narrative |
 
@@ -26,7 +26,7 @@ hreysi version
 
 **2. Register the `expand` skill globally in LifeOS.**
 ```sh
-hreysi skills --global                 # writes ~/.claude/Skills/expand/SKILL.md
+hreysi skills --global                 # writes ~/.claude/skills/expand/SKILL.md
 ```
 It uses the same `SKILL.md` + "use when" routing LifeOS expects, so LifeOS's router
 picks it up at startup.
@@ -88,5 +88,5 @@ and narrates itself. Once a week, if you want, it becomes a stack of LinkedIn dr
 waiting for your yes/no."*
 
 ## Uninstall / opt-out
-- Remove `~/.claude/Skills/expand/` and the SessionEnd entry in `.claude/settings.json`.
+- Remove `~/.claude/skills/expand/` and the SessionEnd entry in `.claude/settings.json`.
 - Delete `.git/hooks/post-commit` (or the entry hreysi appended) to stop capture.

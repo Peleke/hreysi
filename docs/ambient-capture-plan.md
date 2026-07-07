@@ -65,7 +65,7 @@ The mapping is almost one-to-one:
 
 | hreysi | PAI/LifeOS equivalent | Note |
 |---|---|---|
-| `expand` skill (`SKILL.md`, "USE WHEN") | a **Skill** in `~/.claude/Skills/` | *identical format* — drops in with zero adaptation |
+| `expand` skill (`SKILL.md`, "USE WHEN") | a **Skill** in `~/.claude/skills/` | *identical format* — drops in with zero adaptation |
 | `buildlog/` commit spine | a **WORK / OBSERVABILITY** capture source | complements PAI's `History/` (git-commit stream vs session-transcript stream) |
 | expansion trigger | a **`stop`/`subagent-stop` hook** | PAI's Stop hook literally "documents learnings" — hreysi's is the git-narrative specialization |
 | (future) narrative → rules | **KNOWLEDGE** typed graph | where parked qortex interop lands |
@@ -120,7 +120,7 @@ side that must live below any agent); PAI/CC owns the expansion side.
 
 **Phase C — PAI/LifeOS + openclaw packaging.**
 - Publish the `expand` skill + `stop`/`SessionEnd` hook as a LifeOS-compatible bundle
-  (its `SKILL.md` already conforms). Document dropping into `~/.claude/Skills/`.
+  (its `SKILL.md` already conforms). Document dropping into `~/.claude/skills/`.
 - Home `hreysi watch` in openclaw as the tool-agnostic capture daemon.
 - Optional, deferred: a local `hreysi` MCP server (`capture`, `doctor`, `expand-status`)
   so PAI's agentic routing can call it. **Defer** — a *hosted* MCP reopens the
