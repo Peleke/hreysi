@@ -135,7 +135,11 @@ func TestCheckHonorsHooksPathOverride(t *testing.T) {
 		t.Fatalf("git config: %v\n%s", err, out)
 	}
 
-	res, err := Init(dir, "hreysi")
+	// Must be a binary that exists. The old fixture passed the bare name "hreysi",
+	// which resolves only on a machine that already has hreysi installed — it went
+	// green locally and red in CI. This test is about the hooksPath override, not
+	// about PATH lookup, so pin the target.
+	res, err := Init(dir, realBinary(t))
 	if err != nil {
 		t.Fatal(err)
 	}
