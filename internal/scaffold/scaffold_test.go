@@ -22,7 +22,13 @@ func gitInit(t *testing.T) string {
 func TestInitCreatesExecutableHookAndIsIdempotent(t *testing.T) {
 	dir := gitInit(t)
 
-	res, err := Init(dir, "/usr/local/bin/hreysi")
+	// Must be a binary that really exists: init now repoints a hook whose target
+	// does not resolve (that is the whole point of the repair path), so a fixture
+	// using a hardcoded, absent "/usr/local/bin/hreysi" would be perpetually
+	// "repaired" rather than idempotent — and would be lying about the invariant.
+	bin := realBinary(t)
+
+	res, err := Init(dir, bin)
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
@@ -34,7 +40,7 @@ func TestInitCreatesExecutableHookAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "/usr/local/bin/hreysi") || !strings.Contains(string(data), "capture") {
+	if !strings.Contains(string(data), bin) || !strings.Contains(string(data), "capture") {
 		t.Errorf("hook does not call the capture binary:\n%s", data)
 	}
 	if fi, _ := os.Stat(res.HookPath); fi.Mode()&0o100 == 0 {
@@ -44,7 +50,7 @@ func TestInitCreatesExecutableHookAndIsIdempotent(t *testing.T) {
 		t.Errorf("journal dir missing: %v", err)
 	}
 
-	res2, err := Init(dir, "/usr/local/bin/hreysi")
+	res2, err := Init(dir, bin)
 	if err != nil {
 		t.Fatalf("second Init: %v", err)
 	}
@@ -86,7 +92,16 @@ func TestInitRejectsNonRepo(t *testing.T) {
 
 func TestCheckHealthyAfterInit(t *testing.T) {
 	dir := gitInit(t)
-	if _, err := Init(dir, "/usr/local/bin/hreysi"); err != nil {
+	// Point the hook at a binary that actually exists. The previous fixture used a
+	// hardcoded "/usr/local/bin/hreysi" that is absent on most machines — it only
+	// passed because Check never verified the hook's target resolved, which was the
+	// bug (doctor printed "capture is live" over a dead hook). A healthy repo must
+	// mean a hook that can really run.
+	bin := filepath.Join(t.TempDir(), "hreysi")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Init(dir, bin); err != nil {
 		t.Fatal(err)
 	}
 	rep, err := Check(dir)
@@ -120,7 +135,11 @@ func TestCheckHonorsHooksPathOverride(t *testing.T) {
 		t.Fatalf("git config: %v\n%s", err, out)
 	}
 
-	res, err := Init(dir, "hreysi")
+	// Must be a binary that exists. The old fixture passed the bare name "hreysi",
+	// which resolves only on a machine that already has hreysi installed — it went
+	// green locally and red in CI. This test is about the hooksPath override, not
+	// about PATH lookup, so pin the target.
+	res, err := Init(dir, realBinary(t))
 	if err != nil {
 		t.Fatal(err)
 	}

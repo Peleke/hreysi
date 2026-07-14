@@ -6,6 +6,7 @@ package scaffold
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -20,6 +21,67 @@ const hookMarker = "# hreysi: capture this commit"
 func hookBody(exePath string) string {
 	// `|| true` guarantees a hreysi hiccup can never fail a commit.
 	return fmt.Sprintf("%s\n%q capture || true\n", hookMarker, exePath)
+}
+
+// hookTarget extracts the binary path a hreysi post-commit hook actually invokes.
+//
+// The marker being present only proves someone once ran `hreysi init` here — it
+// says nothing about whether the binary that hook points at still exists. A hook
+// written by a `go build` into a temp dir (or by a hreysi that has since been
+// uninstalled, moved, or upgraded out from under the path) keeps its marker and
+// keeps silently failing: `|| true` swallows the error so the commit succeeds and
+// nothing is ever journaled. Doctor exists to catch exactly that, so it must
+// resolve the target, not grep for a comment.
+func hookTarget(data string) (string, bool) {
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "capture") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// hookBody writes the path with %q, so the common case is a quoted path.
+		if i := strings.IndexByte(line, '"'); i >= 0 {
+			if j := strings.IndexByte(line[i+1:], '"'); j >= 0 {
+				return line[i+1 : i+1+j], true
+			}
+		}
+		// Hand-edited hook: first field, e.g. `hreysi capture || true`.
+		if f := strings.Fields(line); len(f) > 0 {
+			return f[0], true
+		}
+	}
+	return "", false
+}
+
+// replaceHookLines swaps hreysi's own two lines (the marker and the invocation
+// that follows it) for a freshly-rendered body, leaving every other line in the
+// file untouched. init may have appended hreysi to a hook the user already owned;
+// repairing our target must never cost them their lines.
+func replaceHookLines(existing, body string) string {
+	lines := strings.Split(strings.TrimRight(existing, "\n"), "\n")
+	out := make([]string, 0, len(lines)+2)
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != hookMarker {
+			out = append(out, lines[i])
+			continue
+		}
+		// Replace the marker plus the invocation line directly beneath it.
+		out = append(out, strings.Split(strings.TrimRight(body, "\n"), "\n")...)
+		if i+1 < len(lines) && strings.Contains(lines[i+1], "capture") {
+			i++ // consume the stale invocation
+		}
+	}
+	return strings.Join(out, "\n") + "\n"
+}
+
+// targetResolves reports whether the hook's binary is actually runnable — either
+// as a path on disk or as a name found on PATH.
+func targetResolves(target string) bool {
+	if strings.ContainsRune(target, filepath.Separator) {
+		info, err := os.Stat(target)
+		return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+	}
+	_, err := exec.LookPath(target)
+	return err == nil
 }
 
 // Result reports what Init did, for a friendly summary.
@@ -84,7 +146,26 @@ func Init(dir, exePath string) (Result, error) {
 		res.HookAction = "created"
 	case err == nil:
 		if strings.Contains(string(existing), hookMarker) {
-			res.HookAction = "up-to-date"
+			// The marker alone does not mean the hook works. A hook installed by a
+			// `go build` into a temp dir, or by a hreysi since moved/upgraded, keeps
+			// its marker while pointing at a binary that no longer exists — and
+			// `|| true` hides the failure, so capture dies silently. Treating that as
+			// "up-to-date" made init unable to repair the very thing doctor tells you
+			// to run init for. Repoint whenever the recorded target isn't what we'd
+			// write now, or no longer resolves.
+			target, found := hookTarget(string(existing))
+			if found && target == exePath && targetResolves(target) {
+				res.HookAction = "up-to-date"
+				break
+			}
+			repaired := replaceHookLines(string(existing), body)
+			if err := os.WriteFile(res.HookPath, []byte(repaired), 0o755); err != nil {
+				return res, err
+			}
+			if err := os.Chmod(res.HookPath, 0o755); err != nil {
+				return res, err
+			}
+			res.HookAction = "repaired"
 			break
 		}
 		merged := strings.TrimRight(string(existing), "\n") + "\n\n" + body
@@ -154,14 +235,31 @@ func Check(dir string) (Report, error) {
 	add("post-commit hook present", lvl(exists), hookPath)
 
 	var wired, executable bool
+	var hookContent string
 	if exists {
 		executable = info.Mode()&0o100 != 0
 		if data, e := os.ReadFile(hookPath); e == nil {
-			wired = strings.Contains(string(data), hookMarker)
+			hookContent = string(data)
+			wired = strings.Contains(hookContent, hookMarker)
 		}
 	}
 	add("hreysi capture wired", lvl(wired), "hook runs `hreysi capture`")
 	add("hook executable", lvl(executable), "")
+
+	// The check that actually answers "will capture fire?". A present, executable,
+	// correctly-marked hook still journals nothing if the binary it calls is gone.
+	if wired {
+		target, found := hookTarget(hookContent)
+		switch {
+		case !found:
+			add("hook target resolves", "fail", "could not parse the binary the hook invokes")
+		case targetResolves(target):
+			add("hook target resolves", "ok", target)
+		default:
+			add("hook target resolves", "fail",
+				target+" — binary not found. The hook fails silently (`|| true`) and NOTHING is captured. Fix: rerun `hreysi init` to repoint it.")
+		}
+	}
 
 	if mgr := detectHookManager(root); mgr != "" {
 		add("hook manager detected", "warn", mgr+" in use — confirm capture fires with a test commit")
@@ -174,6 +272,17 @@ func Check(dir string) (Report, error) {
 		add("journal directory", "warn", entry.DirName+"/ missing (capture will create it)")
 	}
 
-	r.Healthy = exists && wired && executable
+	// Derive the verdict from the checks themselves rather than restating a subset
+	// of them. The old form (`exists && wired && executable`) silently omitted the
+	// target-resolves check, so doctor printed "capture is live" over its own ✗ —
+	// the precise false green this command exists to prevent. Any future check that
+	// can fail is now automatically load-bearing on the verdict.
+	r.Healthy = true
+	for _, c := range r.Results {
+		if c.Level == "fail" {
+			r.Healthy = false
+			break
+		}
+	}
 	return r, nil
 }
