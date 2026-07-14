@@ -104,3 +104,81 @@ Adapt it. Don't invent a new one.
 - Every name in `facts[]` survives verbatim, asserted post-hoc.
 - Zero em dashes, enforced by a check, not a prompt.
 - Nothing was published.
+
+---
+
+## Second by-hand reference run — 2026-07-14
+
+Two articles (`agent-pack`, `dossier-generator`) reshaped into 5 posts each. Confirms the
+original three failures and adds **two the first run did not surface**. Root causes traced
+to source; cite these instead of rediscovering them.
+
+### Confirmed
+
+- **Em-dash re-injection.** Still happening, same cause. The `peleke-linkedin` profile
+  description literally read *"Comfortable with ellipses and em dashes for rhythm."*
+  **Now fixed at the profile level** (prescription 3 above): sample containing em dashes
+  scrubbed, one outright-slop sample deleted, description rewritten to *ban* dashes. The
+  deterministic validator is still required. A profile edit is not a contract.
+
+### New: the reshape bandit silently fans out and ignores the active profile
+
+One call with 5 angles returned **15 posts** (3 voice variants per angle), attributed to
+profiles that were **not active** (`Technical Architect`, `Retrospective`, and a synthetic
+`voice:unshaped` arm). An identical call minutes earlier returned exactly 5.
+
+- `buildVoiceCandidates` (`linwheel/src/lib/voice/bandit.ts:65-80`) builds arms from
+  **every** profile, with **no `isActive` filter**, plus a synthetic unshaped arm.
+  `isActive` is honored **only** in the fallback path (`buildFallback`, `bandit.ts:142-163`).
+- `k` is **hardcoded to 3** at `linwheel/src/app/api/agent/reshape/route.ts:205`.
+- The nondeterminism: `qortexFetch` (`linwheel/src/lib/qortex.ts:65-97`) has a 10s timeout
+  and **swallows every error, returning `null`**, which the caller treats as "not
+  configured" and silently falls back to the active profile. Same input, different output,
+  no error surfaced.
+- Deeper, already documented in `linwheel/docs/LEARNING-LAYER-CRITIQUE.md` (Gap 1): `select`
+  reads the `"default"` qortex context partition while `observeReward` writes a unique
+  per-post context, so **the posteriors never update**. Selection is effectively
+  uniform-random across all profiles, not learned.
+
+**Implication for campaign mode:** you cannot assume one beat produces one post. Either add
+a `voiceMode: "bandit" | "active"` param (~20-30 lines: MCP schema, route body, one
+early-return in `bandit.ts`), or treat generation as over-producing and make **best-of
+selection a required stage** of the pipeline. The contract validator should also assert the
+returned post count matches the beat count.
+
+### New: there is no post-delete tool, so over-generation is unrecoverable
+
+The 10 unwanted drafts could not be removed. They had to be marked `[ALT, NOT SELECTED]`
+in-place. With the bandit over-producing 3x, every campaign run permanently litters the
+dashboard (currently 156 posts, mostly abandoned drafts).
+
+**This is trivial to fix and blocks nothing else:**
+1. Add a `DELETE` handler to `linwheel/src/app/api/agent/posts/[postId]/route.ts` (only
+   `GET`/`PATCH` today). Copy the working user-facing one at
+   `src/app/api/posts/[postId]/route.ts:171-208`, swapping `requireAuth` for
+   `requireAgentAuth` — the same substitution already made for GET/PATCH in that file.
+2. Add `linwheel/mcp/src/tools/post-delete.ts` (~15 lines; mirror `post-carousel-delete.ts`).
+3. Register in `mcp/src/tools/index.ts`.
+
+No schema change. `scheduledComments` already cascades on post delete (`schema.ts:416`);
+`imageIntents` does not, so delete it first, as the existing handler does.
+
+### New: scheduled comments never fire if you publish manually
+
+Boost comments attach fine (`status: "pending"`), and the mechanism is genuinely wired for
+the **auto-publish cron** path. But the dashboard's **"Publish Now" button never calls
+`activateScheduledComments()`**:
+
+- `linwheel/src/app/api/posts/[postId]/publish-linkedin/route.ts:132-140` and
+  `.../publish-org/route.ts:149-158` both set `linkedinPostUrn`/`linkedinPublishedAt` and
+  skip activation, unlike the cron path which calls it at
+  `src/app/api/cron/auto-publish/route.ts:324-326` and `:378-380`.
+- `getCommentsToFire` only selects `status: "scheduled"` (`comment-scheduler.ts:71`), so a
+  manually-published post's comments are stranded at `pending` **forever**.
+- Fix: one call, 2-4 lines, in each of the two manual-publish routes.
+- Also note `/api/cron/auto-publish` is **not** in `vercel.json` (Hobby-plan cron limit); it
+  is triggered externally via cron-job.org. Whether that trigger is live cannot be verified
+  from the repo.
+
+**Until this is fixed:** keep CTA links **in the post body**. Do not rely on the boost
+comment to carry the only link.
