@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Peleke/hreysi/internal/ambient"
+	"github.com/Peleke/hreysi/internal/campaign"
 	"github.com/Peleke/hreysi/internal/capture"
 	"github.com/Peleke/hreysi/internal/digest"
 	"github.com/Peleke/hreysi/internal/gitx"
@@ -63,6 +64,8 @@ func main() {
 		os.Exit(cmdMirror())
 	case "digest":
 		os.Exit(cmdDigest())
+	case "campaign":
+		os.Exit(cmdCampaign())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -227,6 +230,131 @@ func cmdWatch() int {
 		return 1
 	}
 	return 0
+}
+
+// cmdCampaign is the P1 orchestrator surface: `status` and `run --dry-run`. It gates on
+// approval and plans the article fan-out WITHOUT spawning agents or spending tokens — the
+// agentic drafting (P2+) lands later. See docs/campaign-run-spec.md.
+func cmdCampaign() int {
+	cwd, _ := os.Getwd()
+	vault := mirror.VaultDir(cwd)
+	if vault == "" {
+		fmt.Println("hreysi: no vault configured — campaign reads briefs from the vault.")
+		fmt.Println("  set one with:  hreysi mirror --vault <path>")
+		return 0
+	}
+	campaignsDir := filepath.Join(vault, "Campaigns")
+	portfolioDir := filepath.Join(filepath.Dir(cwd), "portfolio", "articles")
+
+	args := os.Args[2:]
+	sub := "status"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		sub = args[0]
+		args = args[1:]
+	}
+	dryRun := false
+	var briefPath string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--dry-run":
+			dryRun = true
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				briefPath = args[i]
+			}
+		}
+	}
+
+	// Resolve the brief: an explicit path, else the newest in Campaigns/.
+	if briefPath == "" {
+		briefs, err := campaign.FindBriefs(campaignsDir)
+		if err != nil || len(briefs) == 0 {
+			fmt.Printf("hreysi: no campaign briefs in %s\n", campaignsDir)
+			fmt.Println("  generate one with the digest-to-brief skill after `hreysi digest`.")
+			return 0
+		}
+		briefPath = briefs[0]
+	} else if !filepath.IsAbs(briefPath) {
+		briefPath = filepath.Join(campaignsDir, briefPath)
+	}
+
+	b, ok, err := campaign.ParseBrief(briefPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
+	if !ok {
+		fmt.Printf("hreysi: %s is not a campaign brief\n", filepath.Base(briefPath))
+		return 1
+	}
+	plan := campaign.BuildPlan(b, portfolioDir)
+
+	fmt.Printf("hreysi campaign — %s  (%s)\n", b.Period, filepath.Base(briefPath))
+	fmt.Printf("  theme:  %s\n", b.Theme)
+	fmt.Printf("  status: %s\n", b.Status)
+	if len(plan.Skipped) > 0 {
+		fmt.Printf("  drafted already: %s\n", strings.Join(plan.Skipped, ", "))
+	}
+
+	switch sub {
+	case "status":
+		fmt.Println("  articles:")
+		for _, a := range b.Articles {
+			mark := "•"
+			if campaign.InDrafted(b, a.ID) {
+				mark = "✓"
+			}
+			fmt.Printf("    %s %s (%s) — %s\n", mark, a.ID, a.Kind, truncate(a.Summary, 60))
+		}
+		if plan.Blocked != "" {
+			fmt.Printf("\n  ⚠ %s\n", plan.Blocked)
+		} else if len(plan.WorkList) == 0 {
+			fmt.Println("\n  all articles drafted — a run would spend nothing.")
+		} else {
+			fmt.Printf("\n  approved — a run would draft %d article(s), starting at %02d-\n", len(plan.WorkList), plan.NextNum)
+		}
+		return 0
+
+	case "run":
+		if plan.Blocked != "" {
+			fmt.Printf("\n  ⚠ %s\n", plan.Blocked)
+			return 1 // the gate: a non-approved brief is a failed run, loudly
+		}
+		if len(plan.WorkList) == 0 {
+			fmt.Println("\n  nothing to draft — all articles are in drafted:. No tokens spent.")
+			return 0
+		}
+		fmt.Printf("\n  would draft %d article(s):\n", len(plan.WorkList))
+		n := plan.NextNum
+		for _, a := range plan.WorkList {
+			writer := "article-draft"
+			if a.Kind == "tutorial" {
+				writer = "technical-tutorial (+ package scaffold)"
+			}
+			fmt.Printf("    %02d- %s (%s) → %s\n", n, a.ID, a.Kind, writer)
+			n++
+		}
+		if dryRun {
+			fmt.Println("\n  --dry-run: no agents spawned, no tokens spent.")
+			return 0
+		}
+		// P1 stops here — the agentic fan-out (spawning claude -p per article) is P2+.
+		fmt.Println("\n  (agent fan-out is not built yet — this is P1: gate + plan only.)")
+		fmt.Println("  fire the drafts now via the `article-runner` skill in a Claude Code session,")
+		fmt.Println("  or wait for `hreysi campaign run` P2 (headless per-article workers).")
+		return 0
+
+	default:
+		fmt.Fprintf(os.Stderr, "hreysi campaign: unknown subcommand %q (want: status | run)\n", sub)
+		return 2
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }
 
 // cmdDigest reads the mirrored corpus for a window and prints a Digest Report:
