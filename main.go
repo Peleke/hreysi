@@ -13,6 +13,7 @@ import (
 
 	"github.com/Peleke/hreysi/internal/ambient"
 	"github.com/Peleke/hreysi/internal/capture"
+	"github.com/Peleke/hreysi/internal/digest"
 	"github.com/Peleke/hreysi/internal/gitx"
 	"github.com/Peleke/hreysi/internal/mirror"
 	"github.com/Peleke/hreysi/internal/scaffold"
@@ -60,6 +61,8 @@ func main() {
 		os.Exit(cmdSkills())
 	case "mirror":
 		os.Exit(cmdMirror())
+	case "digest":
+		os.Exit(cmdDigest())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -226,6 +229,54 @@ func cmdWatch() int {
 	return 0
 }
 
+// cmdDigest reads the mirrored corpus for a window and prints a Digest Report:
+// tag-clustered campaign candidates, standalone posts, tag drift, and a coverage note.
+// It is the mechanical half — it selects what converges; a naming skill writes the
+// Campaign Brief from it. Window defaults to the last 7 days; --since/--until override.
+func cmdDigest() int {
+	cwd, _ := os.Getwd()
+	vault := mirror.VaultDir(cwd)
+	if vault == "" {
+		fmt.Println("hreysi: no vault configured — digest reads the mirrored corpus.")
+		fmt.Println("  set one with:  hreysi mirror --vault <path>   (then mirror your entries)")
+		return 0
+	}
+
+	now := time.Now()
+	since := now.AddDate(0, 0, -7).Format("2006-01-02")
+	until := now.Format("2006-01-02")
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--since":
+			if i+1 < len(args) {
+				since = args[i+1]
+				i++
+			}
+		case "--until":
+			if i+1 < len(args) {
+				until = args[i+1]
+				i++
+			}
+		}
+	}
+
+	buildlogDir := filepath.Join(vault, mirror.VaultSubdir)
+	threads, repos, err := digest.ParseCorpus(buildlogDir, since, until)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
+
+	// Coverage looks at sibling repos under the parent of the current repo.
+	projectsDir := filepath.Dir(cwd)
+	cov := digest.DetectCoverage(projectsDir, since, until, repos)
+
+	rep := digest.Build(fmt.Sprintf("%s … %s", since, until), threads, cov)
+	fmt.Print(rep.Markdown())
+	return 0
+}
+
 // cmdMirror copies expanded entries into an Obsidian vault, so a week of work across
 // every repo can be read as one corpus. Optional: with no vault configured it says so
 // and exits clean — hreysi must never require anyone's note-taking setup.
@@ -322,6 +373,8 @@ USAGE:
   hreysi doctor     Check that capture is actually wired and will fire
   hreysi skills     Install the bundled skills (--global → ~/.claude/skills for LifeOS/PAI;
                     --linwheel → include the opt-in reshape digest skill)
+  hreysi digest     Cluster the week's mirrored corpus into campaign candidates +
+                    standalone posts (--since/--until to set the window)
   hreysi mirror     Copy expanded entries into an Obsidian vault, so a week of work
                     across every repo reads as ONE corpus (--vault <path> to configure).
                     Optional and one-way: never overwrites a file hreysi didn't write.

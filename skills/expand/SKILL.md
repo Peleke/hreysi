@@ -56,6 +56,7 @@ threads:
     thesis: "<the single claim this thread makes>"
     evidence: "<what in the work actually proves it>"
     section: "## <the heading in this file this thread draws from>"
+    tags: [<topical-slug>, <topical-slug>]   # the CLUSTERING keys — see below
     angle: field_note | contrarian | synthesizer | demystifier | curious_cat
     scale: post | article | both
     fit: <1-10>
@@ -102,6 +103,14 @@ is the first client, not the only one.
   it isn't a thread yet.
 - **`evidence`** — what in the actual work proves it. This is the anti-fabrication
   anchor: a downstream writer who can't find evidence must not embellish.
+- **`tags[]`** — the **clustering keys**: 2-4 topical slugs naming *what this thread is
+  about* (`silent-failure`, `git-hooks`, `provenance`). The weekly digest converges
+  threads that share a tag into campaign themes, so pick tags a *future, unrelated*
+  thread could also carry. This is different from `facts[]` (below): a tag is a topic
+  two threads might share; a fact is a specific name that must survive verbatim. Reuse
+  tags across sessions deliberately — a tag only clusters if it recurs. Distinct from
+  the entry-level `tags` in the header, which summarize the whole day; these are
+  per-thread and finer.
 - **`angle`** — the genre that fits the idea. Portable; each client maps it.
 - **`scale`** — `post` (a single beat), `article` (needs long-form: a thought piece
   and/or its paired technical tutorial), or `both`.
