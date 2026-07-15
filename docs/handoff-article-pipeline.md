@@ -102,10 +102,15 @@ elicitation pass, or hand it the manifest `visual-pass` produces on a first pass
 
 ## Open questions for the human
 
-1. **Which skill tree is canonical** — `brunnr/skills/` or `hunter/skills/`? They are
-   near-identical mirrors, and a third copy is stranded in a hunter worktree
-   (`hunter/.claude/worktrees/agent-a72e1ff8/brunnr-work/skills/`). Pick one before
-   building against it.
+1. ~~**Which skill tree is canonical** — `brunnr/skills/` or `hunter/skills/`?~~
+   **ANSWERED 2026-07-14: `brunnr/skills/` is canonical.** Build against it.
+   Two cleanups follow from that decision, neither done yet:
+   - `hunter/skills/` (42 skills) is a stale mirror. It already diverges: `agent-pack`
+     and `dossier-generator` were added to `brunnr/skills/` on 2026-07-14 (PR #47) and
+     do not exist in hunter. Retire the mirror or make it a symlink/submodule; do not
+     let two trees drift.
+   - The stranded worktree copy at
+     `hunter/.claude/worktrees/agent-a72e1ff8/brunnr-work/skills/` should be deleted.
 2. `outline-writer` is scoped to **notebook modules** (course content), not articles.
    Confirm it is out of this path.
 3. `linwheel-content-engine` and `linwheel-source-optimizer` exist in the same tree and
