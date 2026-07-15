@@ -14,6 +14,7 @@ import (
 	"github.com/Peleke/hreysi/internal/ambient"
 	"github.com/Peleke/hreysi/internal/capture"
 	"github.com/Peleke/hreysi/internal/gitx"
+	"github.com/Peleke/hreysi/internal/mirror"
 	"github.com/Peleke/hreysi/internal/scaffold"
 	"github.com/Peleke/hreysi/internal/skillpack"
 	"github.com/Peleke/hreysi/internal/watch"
@@ -57,6 +58,8 @@ func main() {
 		os.Exit(cmdWatch())
 	case "skills":
 		os.Exit(cmdSkills())
+	case "mirror":
+		os.Exit(cmdMirror())
 	case "version", "--version", "-v":
 		fmt.Printf("hreysi %s\n", version)
 	case "help", "--help", "-h":
@@ -223,6 +226,63 @@ func cmdWatch() int {
 	return 0
 }
 
+// cmdMirror copies expanded entries into an Obsidian vault, so a week of work across
+// every repo can be read as one corpus. Optional: with no vault configured it says so
+// and exits clean — hreysi must never require anyone's note-taking setup.
+func cmdMirror() int {
+	cwd, _ := os.Getwd()
+
+	// `hreysi mirror --vault <path>` records the vault for this repo, then mirrors.
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--vault" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "hreysi: --vault needs a path")
+				return 2
+			}
+			if err := mirror.SetVault(cwd, args[i+1]); err != nil {
+				fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+				return 1
+			}
+			i++
+		}
+	}
+
+	res, err := mirror.Run(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hreysi: %v\n", err)
+		return 1
+	}
+	if res.VaultDir == "" {
+		fmt.Println("hreysi: no vault configured — mirroring is off.")
+		fmt.Println("  set one with:  hreysi mirror --vault ~/path/to/ObsidianVault")
+		fmt.Println("  or export HREYSI_VAULT_DIR")
+		return 0
+	}
+
+	fmt.Printf("hreysi mirror — %s\n", filepath.Join(res.VaultDir, mirror.VaultSubdir))
+	for _, d := range res.Mirrored {
+		fmt.Printf("  ✓ %s\n", filepath.Base(d))
+	}
+	for _, s := range res.Skipped {
+		fmt.Printf("  · %s\n", s)
+	}
+	for _, r := range res.Refused {
+		fmt.Printf("  ✗ %s\n", r)
+	}
+	fmt.Println()
+	switch {
+	case len(res.Mirrored) == 0 && len(res.Refused) == 0:
+		fmt.Println("nothing to mirror — expand an entry first.")
+	case len(res.Refused) > 0:
+		// Loud, but not fatal: refusing is mirror working correctly, not failing.
+		fmt.Printf("%d mirrored, %d left untouched (not hreysi's files).\n", len(res.Mirrored), len(res.Refused))
+	default:
+		fmt.Printf("%d mirrored — the corpus is current.\n", len(res.Mirrored))
+	}
+	return 0
+}
+
 func cmdDoctor() int {
 	cwd, _ := os.Getwd()
 	rep, err := scaffold.Check(cwd)
@@ -260,8 +320,11 @@ USAGE:
   hreysi capture    Append HEAD to today's entry (run by the hook; also manual)
   hreysi watch      Watch the reflog and capture every commit — any client, can't-miss
   hreysi doctor     Check that capture is actually wired and will fire
-  hreysi skills     Install the bundled skills (--global → ~/.claude/Skills for LifeOS/PAI;
+  hreysi skills     Install the bundled skills (--global → ~/.claude/skills for LifeOS/PAI;
                     --linwheel → include the opt-in reshape digest skill)
+  hreysi mirror     Copy expanded entries into an Obsidian vault, so a week of work
+                    across every repo reads as ONE corpus (--vault <path> to configure).
+                    Optional and one-way: never overwrites a file hreysi didn't write.
   hreysi version    Print version
   hreysi help       Show this help
 

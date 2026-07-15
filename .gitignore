@@ -1,2 +1,6 @@
 /hreysi
 /dist/
+
+# Machine-specific: the Obsidian vault path for `hreysi mirror`.
+# Capture/expansion work without it; mirroring is opt-in per machine.
+buildlog/.hreysi/vault
