@@ -156,6 +156,48 @@ func TestRun_RefusesToClobberForeignFile(t *testing.T) {
 	}
 }
 
+// A foreign note that merely MENTIONS the marker string — in prose, or quoted inside
+// a frontmatter value — is not ours. The guard must key on the marker as a real
+// top-level frontmatter key, not on its appearance anywhere in the bytes. (Found by
+// dogfooding: an expanded entry whose own narrative discusses `source: hreysi` made
+// the string appear three times; strings.Contains over the whole file would classify
+// a note *about* mirror as mirror's to overwrite.)
+func TestRun_MarkerMentionInProseIsNotOwnership(t *testing.T) {
+	root := repoWithEntry(t, "2026-07-14", v2Entry)
+	vault := t.TempDir()
+	t.Setenv("HREYSI_VAULT_DIR", vault)
+
+	destDir := filepath.Join(vault, VaultSubdir)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(destDir, "2026-07-14-"+filepath.Base(root)+".md")
+
+	// A hand-written note ABOUT how mirror works. Contains the marker string twice —
+	// once in prose, once quoted inside a frontmatter value — but never as a real key.
+	foreign := "---\n" +
+		"title: \"How the mirror guard works\"\n" +
+		"note: \"it writes source: hreysi into frontmatter\"\n" +
+		"---\n\n" +
+		"The provenance marker is `source: hreysi`. That is how it knows.\n"
+	if err := os.WriteFile(dest, []byte(foreign), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(dest)
+	if string(data) != foreign {
+		t.Fatalf("CLOBBERED a note that only MENTIONS the marker.\ngot:\n%s", data)
+	}
+	if len(res.Refused) != 1 {
+		t.Errorf("expected the note to be refused, got %+v", res)
+	}
+}
+
 // Re-expansion must refresh a file we previously wrote. Idempotent, not append-only.
 func TestRun_OverwritesOwnFileAndIsIdempotent(t *testing.T) {
 	root := repoWithEntry(t, "2026-07-14", v2Entry)

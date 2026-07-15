@@ -89,12 +89,40 @@ func hasNarrative(content string) bool {
 // isOurs reports whether a destination file was written by hreysi and may be
 // overwritten. Anything else — a hand-written note, a buildlog-template entry — is
 // off limits, permanently.
+//
+// Ownership is the marker present as a REAL top-level frontmatter key, not the string
+// appearing somewhere in the bytes. A note *about* mirror will contain "source: hreysi"
+// in its prose (or quoted inside another key's value); a substring match would treat
+// that note as ours and overwrite it. Same too-loose-match failure this tool exists to
+// avoid — so the guard reads only the frontmatter block and requires the marker at
+// column zero.
 func isOurs(dest string) (exists, ours bool) {
 	data, err := os.ReadFile(dest)
 	if err != nil {
 		return false, false
 	}
-	return true, strings.Contains(string(data), SourceMarker)
+	return true, hasOwnershipKey(string(data))
+}
+
+// hasOwnershipKey reports whether `source: hreysi` appears as a top-level key inside
+// the leading YAML frontmatter block. Indented occurrences (nested under another key)
+// and body prose do not count.
+func hasOwnershipKey(content string) bool {
+	if !strings.HasPrefix(content, "---\n") {
+		return false
+	}
+	rest := content[len("---\n"):]
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		return false // no closing fence — not well-formed frontmatter
+	}
+	for _, line := range strings.Split(rest[:end], "\n") {
+		// Top-level key: no leading whitespace. Trailing content (comments) tolerated.
+		if line == SourceMarker || strings.HasPrefix(line, SourceMarker+" ") {
+			return true
+		}
+	}
+	return false
 }
 
 // stamp injects hreysi's provenance keys into the entry's frontmatter, creating the
