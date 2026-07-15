@@ -118,7 +118,7 @@ func TestOnceAmendDoesNotClobberUncapturedEarlierCommit(t *testing.T) {
 	if _, err := Once(dir); err != nil { // A captured; marker = A
 		t.Fatal(err)
 	}
-	commit(t, dir, "b.go", "b\n", "feat: B", false)      // NOT captured (missed)
+	commit(t, dir, "b.go", "b\n", "feat: B", false)         // NOT captured (missed)
 	commit(t, dir, "b.go", "bb\n", "feat: B amended", true) // amend of B
 
 	if _, err := Once(dir); err != nil {

@@ -12,7 +12,7 @@
 
 **Commit like you always do. Your work journals itself — then becomes the story of your week.**
 
-[Install](#install) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Capture](#capture-mechanical) · [Expand](#expand-agentic) · [Feed it anywhere](#feed-it-anywhere) · [LifeOS](#using-hreysi-with-lifeos--pai) · [Commands](#commands)
+[Install](#install) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Capture](#capture-mechanical) · [Expand](#expand-agentic) · [Feed it anywhere](#feed-it-anywhere) · [Mirror + digest](#mirror--digest--a-week-of-work-across-every-repo) · [LifeOS](#using-hreysi-with-lifeos--pai) · [Commands](#commands)
 
 </div>
 
@@ -101,7 +101,7 @@ Capture is a side-effect of committing. There is **no pre-commit wall**, no enfo
 
 **It installs where git actually looks.** `hreysi init` writes into the directory git *really* runs hooks from (`git rev-parse --git-path hooks`), so capture works even when `core.hooksPath` is overridden by husky, lefthook, or the pre-commit framework — the #1 way naive hooks silently stop firing.
 
-**`hreysi doctor` — is this thing on?** One command verifies capture is wired and will fire (hook present, points at hreysi, executable, in the effective hooks dir). Exit 0 healthy, exit 1 if capture won't fire, with the fix.
+**`hreysi doctor` — is this thing on?** One command verifies capture is wired and will fire — and crucially, that the binary the hook invokes **actually resolves**, not just that the hook text looks right. A hook pointing at a since-deleted binary fails silently (`|| true`), journals nothing, and would otherwise look fine; doctor catches exactly that. Exit 0 healthy, exit 1 if capture won't fire, with the fix.
 
 ```
 $ hreysi doctor
@@ -110,10 +110,13 @@ hreysi doctor — /path/to/repo
   ✓ post-commit hook present
   ✓ hreysi capture wired
   ✓ hook executable
+  ✓ hook target resolves — /opt/homebrew/bin/hreysi
   ✓ journal directory — buildlog/
 
 capture is live — every commit will be journaled.
 ```
+
+If the target is gone, `hreysi init` **repairs** the hook in place (it re-points a stale target rather than reporting "up-to-date"), preserving any of your own lines in the hook.
 
 ### `hreysi watch` — can't-miss capture
 
@@ -141,7 +144,25 @@ Why the split? The lived experience — the *why*, the friction, the aha — isn
 
 The headline consumer: **turn your week into LinkedIn.** An expanded entry — the real story, dead ends and all — is exactly the source text a tool like [linwheel](https://www.linwheel.io) reshapes into posts. You already generated the content; you just committed it.
 
-This is **opt-in and manual**. `hreysi init --linwheel` (or `hreysi skills --linwheel`) adds a `reshape` skill: a **weekly digest** you fire on demand that scans the week's narrative, triages the post-worthy threads, and drops LinkedIn **drafts** into your linwheel dashboard for review. Nothing auto-generates, nothing auto-publishes — leave `--linwheel` off and hreysi never touches content. The same directory feeds a portfolio generator, a changelog, or a learning loop just as easily. Build to the directory, not the tool.
+This is **opt-in and manual**. `hreysi init --linwheel` (or `hreysi skills --linwheel`) adds a `reshape` skill: a weekly pass you fire on demand that scans the week's narrative, triages the post-worthy threads, and drops LinkedIn **drafts** into your linwheel dashboard for review. Nothing auto-generates, nothing auto-publishes — leave `--linwheel` off and hreysi never touches content. The same directory feeds a portfolio generator, a changelog, or a learning loop just as easily. Build to the directory, not the tool.
+
+## Mirror + digest — a week of work, across every repo
+
+Capture and expand are per-repo. But your *week* isn't — it spans projects, and the throughline usually crosses them. Two commands lift the corpus above any single repo:
+
+- **`hreysi mirror`** copies your expanded entries into an Obsidian vault as `Buildlog/YYYY-MM-DD-<repo>.md`, so every project's narrative lives in **one corpus**. It's one-way and refuses to touch any file it didn't write (it stamps `source: hreysi` and won't overwrite anything lacking that mark), so hand-written notes are safe. Point it once: `hreysi mirror --vault ~/…/YourVault`. With no vault configured it's a clean no-op — mirroring is entirely opt-in.
+
+- **`hreysi digest`** reads that corpus for a window and **clusters** it. Expansion tags each thread with topical keys; digest converges threads that share a tag into *campaign candidates* and leaves the rest as standalone posts — mechanically, by set intersection, never by an LLM "noticing a theme." It ranks by how much a claim converges (not by self-reported importance), names the repos it *couldn't* see so a thin week can't masquerade as complete, and flags tag drift. The output is the input to a content pipeline that turns clustered work into a coherent campaign rather than five disconnected posts.
+
+```
+per repo:   commit ─▶ capture ─▶ expand (## The Journey + threads[])
+                                        │
+cross-repo:                    hreysi mirror ─▶ one vault corpus
+                                        │
+weekly:                        hreysi digest ─▶ campaign candidates + coverage
+```
+
+Both are corpus operations with no LLM in the loop — safe to run on a schedule (nightly mirror, weekly digest). Expansion stays close to the work, because only the session has the story.
 
 ## Using hreysi with LifeOS / PAI
 
@@ -161,14 +182,16 @@ Your commit stream (`buildlog/`) becomes a WORK/OBSERVABILITY source that comple
 | `hreysi init` | Scaffold `buildlog/`, install the capture hook (honors `core.hooksPath`), drop the `expand` skill. `--ambient` wires a SessionEnd expansion hook; `--ambient-stop` adds Stop; `--no-skill` skips the skill |
 | `hreysi capture` | Append HEAD to today's entry — run by the hook; also manual/backfill. Idempotent; replaces on `--amend` |
 | `hreysi watch` | Tail the reflog and capture every commit from any client — can't-miss |
-| `hreysi doctor` | Verify capture is wired and will fire |
+| `hreysi doctor` | Verify capture is wired and will fire — including that the hook's binary resolves |
+| `hreysi mirror` | Copy expanded entries into an Obsidian vault, so a week of work across every repo reads as one corpus. One-way; never overwrites a file it didn't write. `--vault <path>` to configure |
+| `hreysi digest` | Cluster the window's mirrored corpus into campaign candidates + standalone posts, with a coverage note. `--since`/`--until` set the window |
 | `hreysi skills` | Install the bundled skills (`--global` → `~/.claude/skills/` for LifeOS/PAI) |
 | `hreysi version` | Print version |
 | `hreysi help` | Show help |
 
 ## Build from source
 
-hreysi is ~300 lines of Go, **stdlib only** — nothing to fetch, and it compiles to a single static binary.
+hreysi is ~2,000 lines of Go, **stdlib only** — zero dependencies (check `go.mod`), and it compiles to a single static binary.
 
 ```sh
 git clone https://github.com/Peleke/hreysi
